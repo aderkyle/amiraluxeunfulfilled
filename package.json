@@ -1,0 +1,10 @@
+{
+  "name": "neurospeak-cod-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NeuroSpeak COD order call-and-delivery tracker (Netlify site + function + Blobs)",
+  "dependencies": {
+    "@netlify/blobs": "11.1.7"
+  }
+}
