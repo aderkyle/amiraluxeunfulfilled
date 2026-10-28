@@ -26,14 +26,29 @@ function json(body, status = 200) {
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
-function authed(req) {
-  const want = process.env.TRACKER_PASSCODE || "";
-  const got = req.headers.get("x-passcode") || "";
-  if (want.length < 6) return false; // refuse to run with no / weak passcode configured
+function configuredPasscode() {
+  let v = "";
+  try { v = (globalThis.Netlify && globalThis.Netlify.env && globalThis.Netlify.env.get("TRACKER_PASSCODE")) || ""; } catch (_) {}
+  if (!v) v = process.env.TRACKER_PASSCODE || "";
+  return String(v).trim();
+}
+// Returns null when the passcode matches, otherwise a reason code.
+function authProblem(req) {
+  const want = configuredPasscode();
+  const got = String(req.headers.get("x-passcode") || "").trim();
+  if (!want) return "not_configured";
+  if (want.length < 6) return "too_short";
+  if (!got) return "missing";
   const a = createHash("sha256").update(want).digest();
   const b = createHash("sha256").update(got).digest();
-  return timingSafeEqual(a, b);
+  return timingSafeEqual(a, b) ? null : "wrong";
 }
+const AUTH_MSG = {
+  not_configured: "The site has no passcode set yet. In Netlify, add TRACKER_PASSCODE under Environment variables, then redeploy.",
+  too_short: "The site's passcode is shorter than 6 characters. Set a longer TRACKER_PASSCODE in Netlify, then redeploy.",
+  missing: "Enter the team passcode.",
+  wrong: "That passcode doesn't match. Check capital letters and try again.",
+};
 function clean(s, max) {
   return String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
 }
@@ -70,7 +85,8 @@ async function readState(st) {
 export default async (req) => {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
-  if (!authed(req)) return json({ error: "Wrong passcode." }, 401);
+  const problem = authProblem(req);
+  if (problem) return json({ error: AUTH_MSG[problem], reason: problem }, 401);
   const st = store();
 
   try {
